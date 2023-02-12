@@ -4,11 +4,29 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/philippta/trip"
 )
+
+func ExampleDefault() {
+	var (
+		attempts = 3
+		delay    = 50 * time.Millisecond
+		apiToken = os.Getenv("API_TOKEN")
+	)
+
+	client := &http.Client{
+		Transport: trip.Default(
+			trip.BearerToken(apiToken),
+			trip.Retry(attempts, delay, trip.RetryableStatusCodes...),
+		),
+	}
+
+	client.Get("https://api.example.com/endpoint")
+}
 
 func TestBearerToken(t *testing.T) {
 	var (
@@ -51,7 +69,7 @@ func TestRetryNetwork(t *testing.T) {
 		}
 	)
 
-	trans := trip.New(responseTripper(resp), trip.RetryNetwork(expectedAttempts, 0))
+	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 0))
 	trans.RoundTrip(httptest.NewRequest("GET", "/", nil))
 
 	if expectedAttempts != recordedAttempts {
@@ -59,7 +77,7 @@ func TestRetryNetwork(t *testing.T) {
 	}
 }
 
-func TestRetryNetworkDelay(t *testing.T) {
+func TestRetryDelay(t *testing.T) {
 	var (
 		firstCall        time.Time
 		secondCall       time.Time
@@ -76,7 +94,7 @@ func TestRetryNetworkDelay(t *testing.T) {
 		}
 	)
 
-	trans := trip.New(responseTripper(resp), trip.RetryNetwork(expectedAttempts, 5*time.Millisecond))
+	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 5*time.Millisecond))
 	trans.RoundTrip(httptest.NewRequest("GET", "/", nil))
 
 	if expectedAttempts != recordedAttempts {
@@ -89,7 +107,7 @@ func TestRetryNetworkDelay(t *testing.T) {
 	}
 }
 
-func TestRetryHTTPStatusCodes(t *testing.T) {
+func TestRetryStatusCodes(t *testing.T) {
 	var (
 		expectedAttempts = 3
 		recordedAttempts = 0
@@ -99,7 +117,7 @@ func TestRetryHTTPStatusCodes(t *testing.T) {
 		}
 	)
 
-	trans := trip.New(responseTripper(resp), trip.RetryStatusCodes(expectedAttempts, 0, http.StatusBadGateway))
+	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 0, http.StatusBadGateway))
 	trans.RoundTrip(httptest.NewRequest("GET", "/", nil))
 
 	if expectedAttempts != recordedAttempts {
@@ -107,7 +125,7 @@ func TestRetryHTTPStatusCodes(t *testing.T) {
 	}
 }
 
-func TestRetryHTTPStatusCodesSkipped(t *testing.T) {
+func TestRetryStatusCodesSkipped(t *testing.T) {
 	var (
 		expectedAttempts = 1
 		recordedAttempts = 0
@@ -117,7 +135,7 @@ func TestRetryHTTPStatusCodesSkipped(t *testing.T) {
 		}
 	)
 
-	trans := trip.New(responseTripper(resp), trip.RetryStatusCodes(expectedAttempts, 0, http.StatusTooManyRequests))
+	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 0, http.StatusTooManyRequests))
 	trans.RoundTrip(httptest.NewRequest("GET", "/", nil))
 
 	if expectedAttempts != recordedAttempts {
@@ -125,9 +143,9 @@ func TestRetryHTTPStatusCodesSkipped(t *testing.T) {
 	}
 }
 
-func TestRetry(t *testing.T) {
+func TestRetryNetworkAndStatusCode(t *testing.T) {
 	var (
-		expectedAttempts = 2
+		expectedAttempts = 3
 		recordedAttempts = 0
 		resp             = func() (*http.Response, error) {
 			recordedAttempts++
@@ -138,7 +156,7 @@ func TestRetry(t *testing.T) {
 		}
 	)
 
-	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 0))
+	trans := trip.New(responseTripper(resp), trip.Retry(expectedAttempts, 0, trip.RetryableStatusCodes...))
 	trans.RoundTrip(httptest.NewRequest("GET", "/", nil))
 
 	if expectedAttempts != recordedAttempts {
