@@ -9,11 +9,11 @@ Elegant middleware functions for your HTTP clients.
 
 ---
 
-Trip enhances your HTTP clients in very elegant ways:
+Trip is the enhancement for your HTTP clients:
 - Authorize HTTP requests **once** and for all.
 - Make requests **more resilient** against temporary failures.
 - **Removes clutter** from your HTTP calls.
-- Plugs easily into your exisiting HTTP clients.
+- Plugs easily into your existing HTTP clients.
 - Zero dependencies.
 - Tiny and readable codebase.
 
@@ -71,7 +71,7 @@ trip.Default(
 )
 ```
 
-`trip.New` creates a new transport similar to `trip.Default()`, but let's you specify the underlying transport to wrap, if you already have one. Typically you would use `trip.Default(...)`.
+`trip.New` creates a new transport similar to `trip.Default()`, but lets you specify the underlying transport to wrap, if you already have one. Typically, you would use `trip.Default(...)`.
 
 ```go
 trip.New(http.DefaultTransport,
@@ -124,7 +124,7 @@ trip.RetryableStatusCodes = []int{
 
 ## Extending the default HTTP client
 
-You can extend the transport of the default HTTP client (`http.DefaultClient`) for a quick and easy way to add authorization headers or retry behaviour to any of the default HTTP functions.
+You can extend the transport of the default HTTP client (`http.DefaultClient`) for a quick and easy way to add authorization headers or retry behavior to any of the default HTTP functions.
 
 ```go
 http.DefaultClient.Transport = trip.Default(
@@ -140,7 +140,7 @@ http.PostForm("https://api.example.com/endpoint", fromData)
 
 ## Extending the default HTTP transport
 
-You can extend the default transport (`http.DefaultTransport`) to add authorization headers or retry behaviour to any `http.Client` that is created throughout the livetime of your application.
+You can extend the default transport (`http.DefaultTransport`) to add authorization headers or retry behavior to any `http.Client` that is created throughout the lifetime of your application.
 
 ⚠️ Be careful with this as this can alter the behavior of 3rd party libraries.
 
