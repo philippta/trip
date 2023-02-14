@@ -19,13 +19,30 @@ Trip is the enhancement for your HTTP clients:
 
 ---
 
+## Concepts
+
+Trip is aimed to be used with the HTTP client and act as a middleware before any request goes out.
+
+In a nutshell, the `http.Client` builds the HTTP request with its headers and body and hands it over to the transport. The transport then sends it off to the server and waits for the response. Once it got the response, it gives it back to the `http.Client`.
+
+Trip intercepts the hand-over part between client and transport and can modify the request before it goes out. It can also inspect the response and take action like retrying a request on network errors.
+
 ## Installation
 
+Trip requires [Go 1.18](https://go.dev/dl/) or higher. Use `go get` to install the library.
+
 ```
-go get github.com/philippta/trip@latest
+go get -u github.com/philippta/trip@latest
 ```
 
-## Basic usage
+Next, import it into your application:
+```go
+import "github.com/philippta/trip"
+```
+
+## Usage
+
+Trip can be easily used with any `http.Client` by creating a new instance and setting it as the `Transport` of the client.
 
 ```go
 package main
@@ -50,65 +67,162 @@ func main() {
 
             // Retry
             trip.Retry(attempts, delay),
-            trip.Retry(attempts, delay, http.StatusInternalServerError, http.StatusBadGateway),
+            trip.Retry(attempts, delay, http.StatusTooManyRequests),
             trip.Retry(attempts, delay, trip.RetryableStatusCodes...),
+
+            // Idempotency
+            trip.ItempotencyKey()
+
+            // Headers
+            trip.Header("Cache-Control", "no-cache")
+            trip.UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; ...")
         ),
     }
 
-    client.Get("https://api.example.com/endpoint")
+    client.Get("http://example.com/")
 }
 ```
 
-## API Overview
+## Examples
 
-### Initialization
+Listed below are some examples how to use Trip for various situations.
 
-`trip.Default` creates a new transport, that wraps `http.DefaultTransport`. The transport can be then assigned to the transport of a new http.Client or as an override for the `http.DefaultTransport` itself. `trip.Default(...)` is the same as `trip.New(nil, ...)`.
-```go
-trip.Default(
-    trip.BearerToken("api-token"),
-    trip.Retry(5, 50 * time.Millisecond, trip.RetryableStatusCodes...),
-)
-```
-
-`trip.New` creates a new transport similar to `trip.Default()`, but lets you specify the underlying transport to wrap, if you already have one. Typically, you would use `trip.Default(...)`.
+#### Authentication with Bearer Token
 
 ```go
-trip.New(http.DefaultTransport,
-    trip.BearerToken("api-token"),
-    trip.Retry(5, 50 * time.Millisecond, trip.RetryableStatusCodes...),
-)
+func main() {
+    t := trip.Default(
+        trip.BearerToken("api-token"),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
 ```
 
-### Bearer Token
-
-`trip.BearerToken` sets the `Authorization` header to `Bearer <token>` on every request. Useful if you have an API token for an external service.
+#### Authentication with HTTP Basic Auth
 
 ```go
-trip.BearerToken("api-token")
+func main() {
+    t := trip.Default(
+        trip.BasicAuth("username", "password"),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
 ```
 
-### Basic Auth
-
-`trip.BasicAuth` sets the `Authorization` header to `Basic <encoded-username-and-password>` on every request. Username and password are encoded according to RFC 7617.
+#### Applying custom User-Agents
 
 ```go
-trip.BasicAuth("username", "password")
+func main() {
+    t := trip.Default(
+        trip.UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; ..."),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
 ```
 
-### Retry
-
-`trip.Retry` retries a request if either a network related issue is encountered or if the status code of the HTTP response matches any of the provided codes. `trip.RetryableStatusCodes` is a list of common HTTP status codes that can be retried.
+#### Applying custom Header fields
 
 ```go
-trip.Retry(attempts, delay)
-trip.Retry(attempts, delay, statusCodes...)
-trip.Retry(attempts, delay, trip.RetryableStatusCodes...)
+func main() {
+    t := trip.Default(
+        trip.Header("X-Foo", "bar"),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
 ```
 
-### List of retryable HTTP status codes
+#### Retries for flaky networks or API servers
 
-`trip.RetryableStatusCodes` is a list of common HTTP status codes that are considered temporary and can be retried.
+```go
+func main() {
+    var (
+        attempts = 3
+        delay    = 150 * time.Millisecond
+    )
+
+    t := trip.Default(
+        // Retries connection failures
+        trip.Retry(attempts, retryDelay),
+
+        // Retries connection failures and status codes
+        trip.Retry(attempts, retryDelay, http.StatusTooManyRequests),
+
+        // Retries connection failures and common retryable status codes
+        trip.Retry(attempts, retryDelay, trip.RetryableStatusCodes...),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
+```
+
+#### Retrying with Idempotency Keys
+
+```go
+func main() {
+    var (
+        attempts = 3
+        delay    = 150 * time.Millisecond
+    )
+
+    t := trip.Default(
+        // Retries only connection failures
+        trip.Retry(attempts, retryDelay),
+
+        // Generates idempotency keys for POST and PATCH requests
+        trip.IdempotencyKey(),
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
+```
+
+#### Adding custom interceptors
+
+```go
+func main() {
+    t := trip.Default(
+        func (next http.RoundTripper) http.RoundTripper {
+            return trip.RoundTripFunc(func(r *http.Request) (http.Response, error) {
+                // before request
+                resp, err := next.RoundTrip(r)
+                // after request
+                return resp, err
+            })
+        }
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+}
+```
+
+#### Extending the default HTTP client
+
+```go
+func main() {
+    t := trip.Default(
+        trip.BearerToken("api-token"),
+    )
+
+    http.DefaultClient.Transport = t
+    http.Get("http://example.com/")
+}
+```
+
+
+## Retryable HTTP Status Codes
+
+`trip.RetryableStatusCodes` holds a list of common HTTP status codes that are considered temporary and can be retried.
 
 ```go
 trip.RetryableStatusCodes = []int{
@@ -122,34 +236,6 @@ trip.RetryableStatusCodes = []int{
 }
 ```
 
-## Extending the default HTTP client
+## Contributing
 
-You can extend the transport of the default HTTP client (`http.DefaultClient`) for a quick and easy way to add authorization headers or retry behavior to any of the default HTTP functions.
-
-```go
-http.DefaultClient.Transport = trip.Default(
-    trip.BearerToken("api-token"),
-    trip.Retry(3, 50 * time.Millisecond),
-)
-
-http.Get("https://api.example.com/endpoint")
-http.Post("https://api.example.com/endpoint", "application/json", body)
-http.PostForm("https://api.example.com/endpoint", fromData)
-```
-
-
-## Extending the default HTTP transport
-
-You can extend the default transport (`http.DefaultTransport`) to add authorization headers or retry behavior to any `http.Client` that is created throughout the lifetime of your application.
-
-⚠️ Be careful with this as this can alter the behavior of 3rd party libraries.
-
-```go
-http.DefaultTransport = trip.Default(
-    trip.BearerToken("api-token"),
-    trip.Retry(3, 50 * time.Millisecond),
-)
-
-client := &http.Client{} // uses http.DefaultTransport
-client.Get("https://example.com/endpoint")
-```
+If you like to contribute to Trip by adding new features, improving the documentation or fixing bugs, feel free to open a [new issue](https://github.com/philippta/trip/issues).

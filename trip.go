@@ -1,7 +1,9 @@
 package trip
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"time"
@@ -48,22 +50,41 @@ func Default(trips ...TripFunc) http.RoundTripper {
 	return New(nil, trips...)
 }
 
-// BearerToken sets the `Authorization` header on every request to `Bearer <token>`.
-func BearerToken(token string) TripFunc {
+// Header sets a header field on every request to the given value.
+func Header(key, value string) TripFunc {
 	return func(t http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
-			r.Header.Set("Authorization", "Bearer "+token)
+			r.Header.Set(key, value)
 			return t.RoundTrip(r)
 		})
 	}
 }
 
+// BearerToken sets the `Authorization` header on every request to `Bearer <token>`.
+func BearerToken(token string) TripFunc {
+	return Header("Authorization", "Bearer "+token)
+}
+
 // BasicAuth sets the `Authorization` header on every request to `Basic <encoded-username-and-password>`.
 func BasicAuth(username, password string) TripFunc {
 	encoded := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	return Header("Authorization", "Basic "+encoded)
+}
+
+// UserAgent sets the `User-Agent` header on every request to the given user agent.
+func UserAgent(agent string) TripFunc {
+	return Header("User-Agent", agent)
+}
+
+// IdempotencyKey generates a random string for POST and PATCH requests and sets it
+// as the `Idempotency-Key` header. If used in conjunction with Retry, this
+// function should be applied after Retry.
+func IdempotencyKey() TripFunc {
 	return func(t http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
-			r.Header.Set("Authorization", "Basic "+encoded)
+			if r.Method == http.MethodPost || r.Method == http.MethodPatch {
+				r.Header.Set("Idempotency-Key", randKey())
+			}
 			return t.RoundTrip(r)
 		})
 	}
@@ -108,4 +129,10 @@ func Retry(attempts int, delay time.Duration, statusCodes ...int) TripFunc {
 			return resp, err
 		})
 	}
+}
+
+func randKey() string {
+	var buf [16]byte
+	io.ReadFull(rand.Reader, buf[:])
+	return hex.EncodeToString(buf[:])
 }

@@ -2,9 +2,11 @@ package trip_test
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +28,18 @@ func ExampleDefault() {
 	}
 
 	client.Get("https://api.example.com/endpoint")
+}
+
+func TestHeader(t *testing.T) {
+	var (
+		key   = "X-Foo"
+		value = "bar"
+	)
+
+	roundTrip(func(r *http.Request) (*http.Response, error) {
+		assertEqual(t, r.Header.Get(key), value)
+		return nil, nil
+	}, trip.Header(key, value))
 }
 
 func TestBearerToken(t *testing.T) {
@@ -51,6 +65,17 @@ func TestBasicAuth(t *testing.T) {
 		assertEqual(t, r.Header.Get("Authorization"), expected)
 		return nil, nil
 	}, trip.BasicAuth(username, password))
+}
+
+func TestUserAgent(t *testing.T) {
+	var (
+		userAgent = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+	)
+
+	roundTrip(func(r *http.Request) (*http.Response, error) {
+		assertEqual(t, r.Header.Get("User-Agent"), userAgent)
+		return nil, nil
+	}, trip.UserAgent(userAgent))
 }
 
 func TestRetryNetwork(t *testing.T) {
@@ -80,7 +105,7 @@ func TestRetryStatusCodes(t *testing.T) {
 
 	roundTrip(func(r *http.Request) (*http.Response, error) {
 		calls = append(calls, time.Now())
-		return &http.Response{StatusCode: http.StatusBadGateway}, nil
+		return &http.Response{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}, trip.Retry(attempts, delay, trip.RetryableStatusCodes...))
 
 	assertEqual(t, len(calls), attempts)
@@ -98,14 +123,32 @@ func TestRetryStatusCodesSkipped(t *testing.T) {
 
 	roundTrip(func(r *http.Request) (*http.Response, error) {
 		calls = append(calls, time.Now())
-		return &http.Response{StatusCode: http.StatusBadGateway}, nil
+		return &http.Response{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader(""))}, nil
 	}, trip.Retry(attempts, delay, codes...))
 
 	assertEqual(t, len(calls), 1)
 }
 
+func TestIdempotencyKey(t *testing.T) {
+	var (
+		idems []string
+
+		attempts = 3
+		delay    = 2 * time.Millisecond
+	)
+
+	roundTrip(func(r *http.Request) (*http.Response, error) {
+		idems = append(idems, r.Header.Get("Idempotency-Key"))
+		return nil, errors.New("network error")
+	}, trip.Retry(attempts, delay), trip.IdempotencyKey())
+
+	assertEqual(t, len(idems), attempts)
+	assertNotEqual(t, idems[0], "")
+	assertEqual(t, idems[0], idems[1])
+}
+
 func roundTrip(f trip.RoundTripperFunc, trips ...trip.TripFunc) {
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest("POST", "/", nil)
 	transport := trip.New(f, trips...)
 	transport.RoundTrip(req)
 }
@@ -113,6 +156,12 @@ func roundTrip(f trip.RoundTripperFunc, trips ...trip.TripFunc) {
 func assertEqual[T comparable](t *testing.T, a T, b T) {
 	if a != b {
 		t.Errorf("got: %v, expected: %v", a, b)
+	}
+}
+
+func assertNotEqual[T comparable](t *testing.T, a T, b T) {
+	if a == b {
+		t.Errorf("got: %v and %v, expected something else", a, b)
 	}
 }
 
