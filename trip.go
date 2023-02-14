@@ -2,6 +2,7 @@ package trip
 
 import (
 	"encoding/base64"
+	"io"
 	"net/http"
 	"time"
 )
@@ -82,6 +83,14 @@ func Retry(attempts int, delay time.Duration, statusCodes ...int) TripFunc {
 		return false
 	}
 
+	drain := func(resp *http.Response) {
+		if resp == nil || resp.Body == nil {
+			return
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+
 	return func(t http.RoundTripper) http.RoundTripper {
 		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			var resp *http.Response
@@ -92,6 +101,7 @@ func Retry(attempts int, delay time.Duration, statusCodes ...int) TripFunc {
 				if err == nil && !retryable(resp.StatusCode) {
 					break
 				}
+				drain(resp)
 				time.Sleep(delay)
 			}
 

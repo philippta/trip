@@ -66,8 +66,8 @@ func main() {
 `trip.Default` creates a new transport, that wraps `http.DefaultTransport`. The transport can be then assigned to the transport of a new http.Client or as an override for the `http.DefaultTransport` itself. `trip.Default(...)` is the same as `trip.New(nil, ...)`.
 ```go
 trip.Default(
-    trip.BearerToken(apiToken),
-    trip.Retry(attempts, delay, statusCodes...),
+    trip.BearerToken("api-token"),
+    trip.Retry(5, 50 * time.Millisecond, trip.RetryableStatusCodes...),
 )
 ```
 
@@ -75,8 +75,8 @@ trip.Default(
 
 ```go
 trip.New(http.DefaultTransport,
-    trip.BearerToken(apiToken),
-    trip.Retry(attempts, delay, statusCodes...),
+    trip.BearerToken("api-token"),
+    trip.Retry(5, 50 * time.Millisecond, trip.RetryableStatusCodes...),
 )
 ```
 
@@ -85,7 +85,7 @@ trip.New(http.DefaultTransport,
 `trip.BearerToken` sets the `Authorization` header to `Bearer <token>` on every request. Useful if you have an API token for an external service.
 
 ```go
-trip.BearerToken(token)
+trip.BearerToken("api-token")
 ```
 
 ### Basic Auth
@@ -93,7 +93,7 @@ trip.BearerToken(token)
 `trip.BasicAuth` sets the `Authorization` header to `Basic <encoded-username-and-password>` on every request. Username and password are encoded according to RFC 7617.
 
 ```go
-trip.BasicAuth(username, password)
+trip.BasicAuth("username", "password")
 ```
 
 ### Retry
