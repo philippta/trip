@@ -71,7 +71,7 @@ func main() {
             trip.Retry(attempts, delay, trip.RetryableStatusCodes...),
 
             // Idempotency
-            trip.ItempotencyKey()
+            trip.IdempotencyKey()
 
             // Headers
             trip.Header("Cache-Control", "no-cache")
