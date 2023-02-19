@@ -65,6 +65,16 @@ func main() {
             trip.BearerToken("api-token"),
             trip.BasicAuth("username", "password"),
 
+            // Headers
+            trip.Header("Cache-Control", "no-cache")
+            trip.UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; ...")
+
+            // Logging
+            trip.Logger(log.Printf)
+            trip.Logger(logrus.Infof)                  // github.com/sirupsen/logrus
+            trip.Logger(zap.S().Infof)                 // github.com/uber-go/zap
+            trip.Logger(zerolog.New(os.Stdout).Printf) // github.com/rs/zerolog
+
             // Retry
             trip.Retry(attempts, delay),
             trip.Retry(attempts, delay, http.StatusTooManyRequests),
@@ -72,10 +82,6 @@ func main() {
 
             // Idempotency
             trip.IdempotencyKey()
-
-            // Headers
-            trip.Header("Cache-Control", "no-cache")
-            trip.UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; ...")
         ),
     }
 
@@ -87,24 +93,12 @@ func main() {
 
 Listed below are some examples how to use Trip for various situations.
 
-#### Authentication with Bearer Token
+#### Authentication (Bearer Token, Basic Auth)
 
 ```go
 func main() {
     t := trip.Default(
         trip.BearerToken("api-token"),
-    )
-
-    client := &http.Client{Transport: t}
-    client.Get("http://example.com/")
-}
-```
-
-#### Authentication with HTTP Basic Auth
-
-```go
-func main() {
-    t := trip.Default(
         trip.BasicAuth("username", "password"),
     )
 
@@ -113,25 +107,13 @@ func main() {
 }
 ```
 
-#### Applying custom User-Agents
+#### Static HTTP Headers (User Agent, Cache Control, etc.)
 
 ```go
 func main() {
     t := trip.Default(
         trip.UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; ..."),
-    )
-
-    client := &http.Client{Transport: t}
-    client.Get("http://example.com/")
-}
-```
-
-#### Applying custom Header fields
-
-```go
-func main() {
-    t := trip.Default(
-        trip.Header("X-Foo", "bar"),
+        trip.Header("Cache-Control", "max-age=86400"),
     )
 
     client := &http.Client{Transport: t}
@@ -174,7 +156,7 @@ func main() {
     )
 
     t := trip.Default(
-        // Retries only connection failures
+        // Retries connection failures
         trip.Retry(attempts, retryDelay),
 
         // Generates idempotency keys for POST and PATCH requests
@@ -186,7 +168,26 @@ func main() {
 }
 ```
 
-#### Adding custom interceptors
+#### Logging with different libraries (log, zap, logrus, zerolog)
+
+```go
+func main() {
+    t := trip.Default(
+        trip.Logger(log.Printf),
+        trip.Logger(logrus.Infof),                  // github.com/sirupsen/logrus
+        trip.Logger(zap.S().Infof),                 // github.com/uber-go/zap
+        trip.Logger(zerolog.New(os.Stdout).Printf), // github.com/rs/zerolog
+    )
+
+    client := &http.Client{Transport: t}
+    client.Get("http://example.com/")
+
+    // Example message:
+    // POST http://example.com/ - 200 OK - 12.34ms
+}
+```
+
+#### Custom Interceptors
 
 ```go
 func main() {

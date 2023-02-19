@@ -131,6 +131,35 @@ func Retry(attempts int, delay time.Duration, statusCodes ...int) TripFunc {
 	}
 }
 
+// Logger logs every request using the provided log function.
+// Any function that matches the printf signature can be used like log.Printf
+// or similar functions from popular packages like zap, zerolog, logrus, etc.
+// Logger should be placed before Retry in the list of trip functions.
+//
+// Output examples:
+//
+//	POST http://example.com/endpoint?key=value - 200 OK - 12.34ms
+//	POST http://example.com/endpoint?key=value - error:"network error" - 12.34ms
+func Logger(f func(format string, v ...any)) TripFunc {
+	if f == nil {
+		panic("trip: log function is nil")
+	}
+	return func(t http.RoundTripper) http.RoundTripper {
+		return RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			start := time.Now()
+
+			resp, err := t.RoundTrip(r)
+			if err != nil {
+				f("%s %s - error:%q - %v", r.Method, r.URL.String(), err.Error(), time.Since(start))
+			} else {
+				f("%s %s - %s - %v", r.Method, r.URL.String(), resp.Status, time.Since(start))
+			}
+
+			return resp, err
+		})
+	}
+}
+
 func randKey() string {
 	var buf [16]byte
 	io.ReadFull(rand.Reader, buf[:])

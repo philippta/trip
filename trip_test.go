@@ -2,6 +2,7 @@ package trip_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -147,15 +148,47 @@ func TestIdempotencyKey(t *testing.T) {
 	assertEqual(t, idems[0], idems[1])
 }
 
+func TestLogger(t *testing.T) {
+	logf := func(format string, v ...any) {
+		msg := fmt.Sprintf(format, v...)
+		assertPrefix(t, msg, "POST http://example.com/foo?bar=yes - 200 OK -")
+	}
+
+	roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{Status: "200 OK", StatusCode: 200, Body: io.NopCloser(strings.NewReader("foo"))}, nil
+	}, trip.Logger(logf))
+}
+
+func TestLoggerError(t *testing.T) {
+	logf := func(format string, v ...any) {
+		msg := fmt.Sprintf(format, v...)
+		assertPrefix(t, msg, `POST http://example.com/foo?bar=yes - error:"network error" -`)
+	}
+
+	roundTrip(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("network error")
+	}, trip.Logger(logf))
+}
+
 func roundTrip(f trip.RoundTripperFunc, trips ...trip.TripFunc) {
-	req := httptest.NewRequest("POST", "/", nil)
+	req := httptest.NewRequest("POST", "http://example.com/foo?bar=yes", nil)
 	transport := trip.New(f, trips...)
 	transport.RoundTrip(req)
+}
+
+func noop(r *http.Request) (*http.Response, error) {
+	return nil, nil
 }
 
 func assertEqual[T comparable](t *testing.T, a T, b T) {
 	if a != b {
 		t.Errorf("got: %v, expected: %v", a, b)
+	}
+}
+
+func assertPrefix(t *testing.T, a, b string) {
+	if !strings.HasPrefix(a, b) {
+		t.Errorf("got: %v, expected to start with: %v", a, b)
 	}
 }
 
